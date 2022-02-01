@@ -180,6 +180,13 @@ aws_region_from_host(Host) ->
             default_config_get(?AWS_REGION, aws_region, "us-east-1")
     end.
 
+aws_request4(Method, Protocol, Host, Port, Path, Params, {"rekognition", Target}, Config) ->
+    RekognitionHeaders = [
+        {"x-amz-target", Target}, 
+        {"content-type", "application/x-amz-json-1.1"}
+    ],
+    aws_request4(Method, Protocol, Host, Port, Path, Params, "rekognition", RekognitionHeaders, Config);
+
 aws_request4(Method, Protocol, Host, Port, Path, Params, Service, Config) ->
     aws_request4(Method, Protocol, Host, Port, Path, Params, Service, [], Config).
 
@@ -197,6 +204,7 @@ aws_request4(Method, Protocol, Host, Port, Path, Params, Service, Headers, Confi
 aws_request4_no_update(Method, Protocol, Host, Port, Path, Params, Service,
                        Headers, #aws_config{aws_region = AwsRegion} = Config) ->
     {Query, RequestHeaders} = encode_params(Params, Headers),
+    % Query = binary_to_list(jsx:encode(Params)),
     Uri = erlcloud_http:url_encode_loose(Path),
     Region = case AwsRegion of
       undefined -> aws_region_from_host(Host);
@@ -211,6 +219,9 @@ aws_request4_no_update(Method, Protocol, Host, Port, Path, Params, Service,
                     [{"host", Host}], list_to_binary(Query),
                     Region, Service, [])
     end,
+    % io:format("~nParams: ~p~n", [Params]),
+    % {"x-amz-target", "RekognitionService.CompareFaces"}
+    % io:format("~nSignedHeaders ++ RequestHeaders: ~p~n", [SignedHeaders ++ RequestHeaders]),
     aws_request_form(Method, Protocol, Host, Port, Path, Query,
                      SignedHeaders ++ RequestHeaders, Config).
 
@@ -227,6 +238,8 @@ aws_request_form(Method, Protocol, Host, Port, Path, Form, Headers, Config) ->
         undefined -> "https://";
         _ -> [Protocol, "://"]
     end,
+    
+
     aws_request_form_raw(Method, Scheme, Host, Port, Path, list_to_binary(Form), RequestHeaders, [], Config).
 
 
@@ -331,9 +344,10 @@ format_timestamp({{Yr, Mo, Da}, {H, M, S}}) ->
 encode_params(Params, Headers) ->
   LowerCaseHeaders = lists:map(fun({K, V}) -> {string:to_lower(K), V} end, Headers),
   case proplists:get_value("content-type", LowerCaseHeaders) of
+    "application/x-amz-json-1.1" ->  {binary_to_list(jsx:encode((Params))), LowerCaseHeaders};
     undefined -> {erlcloud_http:make_query_string(Params),
-                  [{"content-type", ?DEFAULT_CONTENT_TYPE} | LowerCaseHeaders]};
-    ?DEFAULT_CONTENT_TYPE -> {erlcloud_http:make_query_string(Params), LowerCaseHeaders};
+        [{"content-type", ?DEFAULT_CONTENT_TYPE} | LowerCaseHeaders]};
+    ?DEFAULT_CONTENT_TYPE -> {binary_to_list(jsx:encode((Params))), LowerCaseHeaders};
     _ContentType -> {Params, LowerCaseHeaders}
   end.
 
